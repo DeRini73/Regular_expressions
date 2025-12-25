@@ -1,7 +1,14 @@
 import csv
 import re
 from collections import defaultdict
+from pprint import pprint
 
+test_file = "phonebook_raw.csv"
+
+with open(test_file, encoding="utf-8") as f:
+    rows = csv.reader(f, delimiter=";")
+    contacts_list = list(rows)
+pprint(contacts_list)
 
 def normalize_fio(full_name):
     full_name = full_name.replace('\n', ' ').replace('\r', ' ').replace('\t', ' ').replace('"', '').strip()
@@ -19,50 +26,65 @@ def normalize_fio(full_name):
     else:
         return "", "", ""
 
-
 def normalize_phone(phone):
     if not phone:
         return ""
 
-    extension = ""
-    match_extension = re.search(r'доб[авочный\.\s]*(\d+)', phone.lower())
+    pattern = r"(\+7|8)?\s*\(?([\d\-]+)\)?[\s\-]*(\d{2,4})[\s\-]*(\d{2,3})[\s\-]*(\d{2})?\s*(\(?\s*доб\.?\s*(\d+)\)?)?"
+    match = re.search(pattern, phone)
 
-    if match_extension:
-        extension = match_extension.group(1)
-        phone = re.sub(r'доб[авочный\.\s]*\d+', '', phone, flags=re.IGNORECASE).strip()
+    if not match:
+        digits = re.sub(r'\D', '', phone)
 
-    phone = re.sub(r'[^\d]', '', phone)
+        ext_match = re.search(r'доб[\.\s]*(\d+)', phone, re.IGNORECASE)
+        extension = ext_match.group(1) if ext_match else ""
 
-    if not phone:
+        if not digits:
+            if extension:
+                return f"доб.{extension}"
+            return phone
+
+        if digits.startswith('8'):
+            digits = '+7' + digits[1:]
+
+        if not digits.startswith('7'):
+            digits = '+7' + digits
+
+        if len(digits) >= 11:
+            formatted = f"+7({digits[1:4]}){digits[4:7]}-{digits[7:9]}-{digits[9:11]}"
+
         if extension:
-            return f"доб.{extension}"
-        return ""
+            formatted += f" доб.{extension}"
 
-    if phone.startswith('8'):
-        phone = '+ 7' + phone[1:]
+        return formatted
 
-    if phone and not phone.startswith('7'):
-        phone = '+ 7' + phone
+    groups = match.groups()
 
-    if len(phone) == 11:
-        formatted = f"+ 7({phone[1:4]}){phone[4:7]}-{phone[7:9]}-{phone[9:]}"
+    area_code_raw = groups[1] if groups[1] else ""
+    area_code = re.sub(r'[^\d]', '', area_code_raw)
 
-    elif len(phone) == 10:
-        formatted = f"+ 7({phone[0:3]}){phone[3:6]}-{phone[6:8]}-{phone[8:]}"
+    if len(area_code) > 3:
+        area_code = area_code[:3]
 
-    else:
-        formatted = phone
+    parts = []
+    for i in range(2, 5):
+        if groups[i]:
+            parts.append(groups[i])
 
-    if extension:
-        formatted = f"{formatted} доб.{extension}"
+    if len(parts) >= 3:
+        formatted_phone = f"+7({area_code}){parts[0]}-{parts[1]}-{parts[2]}"
 
-    return formatted
+    elif len(parts) == 2:
+        formatted_phone = f"+7({area_code}){parts[0]}-{parts[1]}-00"
 
-test_file = "data-11192014-structure-11192014.csv"
+    elif len(parts) == 1:
+        formatted_phone = f"+7({area_code}){parts[0]}-00-00"
 
-with open(test_file, encoding="utf-8") as f:
-    rows = csv.reader(f, delimiter=";")
-    contacts_list = list(rows)
+    if groups[6]:
+        formatted_phone += f" доб.{groups[6]}"
+
+    return formatted_phone
+
 
 person_dict = defaultdict(lambda: {
     'lastname': '',
@@ -137,8 +159,8 @@ contacts_list = new_contacts_list
 
 exit_file = "phonebook.csv"
 
-with open(exit_file, "w", encoding="utf-8", newline='') as f:
+with open(exit_file, "w", encoding="utf-8") as f:
     datawriter = csv.writer(f, delimiter=',')
     datawriter.writerows(contacts_list)
 
-print(f"Данные из файла <<{test_file}>> отсортированы и сохранены в файл <<{exit_file}>>")
+print(f"Данные из файла '{test_file}' отсортированы и сохранены в файл '{exit_file}'")
